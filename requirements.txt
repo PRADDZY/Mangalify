@@ -1,0 +1,10 @@
+discord.py
+python-dotenv
+aiohttp
+motor
+pytz
+pytest
+pytest-asyncio
+mongomock-motor
+typing-extensions
+google-generativeai
