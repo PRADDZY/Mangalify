@@ -21,6 +21,15 @@ A Discord bot designed to bring joy and celebration to your server by automatica
 - **Birthday Management**: View and manage user birthdays
 - **Channel Configuration**: Dedicated channels for different types of announcements
 
+### 🌐 Web Dashboard
+- **Analytics Dashboard**: Comprehensive statistics about birthdays, wishes, and upcoming events
+- **Birthday Management**: Browse, search, and delete registered birthdays
+- **Wish Management**: View and delete custom wishes
+- **Visual Charts**: Birthday distribution by month visualization
+- **Secure Access**: Password-protected admin interface
+- **Responsive Design**: Works on desktop and mobile devices
+- **RESTful API**: JSON endpoints for external integrations
+
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -78,10 +87,15 @@ A Discord bot designed to bring joy and celebration to your server by automatica
 
 5. **Run the web dashboard (optional)**
    ```bash
+   python run_web.py
+   ```
+   
+   Or directly:
+   ```bash
    python web/app.py
    ```
    
-   Then access the dashboard at `http://localhost:5000`
+   Then access the dashboard at `http://localhost:5000` (default password: `admin`)
 
 ## 📖 Usage
 
