@@ -8,3 +8,6 @@ pytest-asyncio
 mongomock-motor
 typing-extensions
 google-generativeai
+flask
+flask-cors
+werkzeug

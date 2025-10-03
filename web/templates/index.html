@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}Home - Mangalify Dashboard{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Welcome to Mangalify Dashboard</h2>
+    <p style="color: #666; line-height: 1.6; margin-top: 10px;">
+        This is the web management interface for your Mangalify Discord bot. 
+        Use the navigation menu above to access different sections:
+    </p>
+    
+    <div style="margin-top: 30px; display: grid; gap: 20px;">
+        <div style="padding: 20px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #667eea;">
+            <h3 style="color: #667eea; margin-bottom: 10px;">📊 Analytics</h3>
+            <p style="color: #666;">View comprehensive statistics about birthdays, wishes, and bot activity.</p>
+        </div>
+        
+        <div style="padding: 20px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #764ba2;">
+            <h3 style="color: #764ba2; margin-bottom: 10px;">🎂 Birthdays</h3>
+            <p style="color: #666;">Manage user birthdays, view upcoming celebrations, and remove entries.</p>
+        </div>
+        
+        <div style="padding: 20px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #667eea;">
+            <h3 style="color: #667eea; margin-bottom: 10px;">💝 Wishes</h3>
+            <p style="color: #666;">Manage custom wishes for special occasions and holidays.</p>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Quick Stats</h2>
+    <div id="quick-stats">
+        <p style="color: #999; text-align: center; padding: 20px;">Loading statistics...</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Load quick stats
+    fetch('/api/stats')
+        .then(response => response.json())
+        .then(data => {
+            const statsHtml = `
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h3>Total Birthdays</h3>
+                        <div class="value">${data.total_birthdays}</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Custom Wishes</h3>
+                        <div class="value">${data.total_wishes}</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Upcoming (7 days)</h3>
+                        <div class="value">${data.upcoming_birthdays.length}</div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('quick-stats').innerHTML = statsHtml;
+        })
+        .catch(error => {
+            console.error('Error loading stats:', error);
+            document.getElementById('quick-stats').innerHTML = '<p style="color: #c00; text-align: center; padding: 20px;">Failed to load statistics</p>';
+        });
+</script>
+{% endblock %}
