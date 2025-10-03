@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Birthdays - Mangalify Dashboard{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Registered Birthdays ({{ birthdays|length }})</h2>
+    
+    {% if birthdays %}
+    <table>
+        <thead>
+            <tr>
+                <th>User ID</th>
+                <th>Birthday</th>
+                <th>Age (approx)</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for birthday in birthdays %}
+            <tr id="birthday-{{ birthday._id }}">
+                <td>{{ birthday._id }}</td>
+                <td>{{ birthday.day }}/{{ birthday.month }}/{{ birthday.year }}</td>
+                <td>
+                    {% set current_year = 2024 %}
+                    {% set age = current_year - birthday.year %}
+                    {{ age }} years
+                </td>
+                <td>
+                    <button class="btn btn-danger" onclick="deleteBirthday({{ birthday._id }})">Delete</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+        <p>No birthdays registered yet</p>
+        <p style="font-size: 14px; margin-top: 10px;">Users can register their birthdays using the /birthday set command in Discord</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function deleteBirthday(userId) {
+        if (!confirm('Are you sure you want to delete this birthday?')) {
+            return;
+        }
+        
+        fetch(`/api/birthdays/${userId}`, {
+            method: 'DELETE'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Remove the row from the table
+                const row = document.getElementById(`birthday-${userId}`);
+                if (row) {
+                    row.style.transition = 'opacity 0.3s';
+                    row.style.opacity = '0';
+                    setTimeout(() => {
+                        row.remove();
+                        
+                        // Check if table is now empty
+                        const tbody = document.querySelector('tbody');
+                        if (!tbody || tbody.children.length === 0) {
+                            location.reload();
+                        }
+                    }, 300);
+                }
+                alert('Birthday deleted successfully');
+            } else {
+                alert('Failed to delete birthday');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while deleting the birthday');
+        });
+    }
+</script>
+{% endblock %}

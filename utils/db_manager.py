@@ -62,4 +62,63 @@ class DatabaseManager:
         }
         await self.manual_wishes.insert_one(wish_doc)
 
+    async def get_all_manual_wishes(self):
+        """Get all manual wishes"""
+        return await self.manual_wishes.find({}).to_list(length=None)
+
+    async def delete_manual_wish(self, wish_id: str):
+        """Delete a manual wish by ID"""
+        from bson import ObjectId
+        result = await self.manual_wishes.delete_one({"_id": ObjectId(wish_id)})
+        return result.deleted_count > 0
+
+    # --- Analytics Methods ---
+    async def get_total_birthdays(self):
+        """Get total count of registered birthdays"""
+        return await self.birthdays.count_documents({})
+
+    async def get_all_birthdays(self):
+        """Get all birthdays"""
+        return await self.birthdays.find({}).to_list(length=None)
+
+    async def get_birthdays_by_month(self):
+        """Get birthday count by month"""
+        pipeline = [
+            {"$group": {"_id": "$month", "count": {"$sum": 1}}},
+            {"$sort": {"_id": 1}}
+        ]
+        result = await self.birthdays.aggregate(pipeline).to_list(length=None)
+        return result
+
+    async def get_upcoming_birthdays(self, days: int = 30):
+        """Get upcoming birthdays within specified days"""
+        from datetime import datetime, timedelta
+        today = datetime.now()
+        birthdays = await self.get_all_birthdays()
+        
+        upcoming = []
+        for bday in birthdays:
+            # Create a date for this year
+            try:
+                this_year_birthday = datetime(today.year, bday['month'], bday['day'])
+                if this_year_birthday < today:
+                    # Try next year if already passed
+                    this_year_birthday = datetime(today.year + 1, bday['month'], bday['day'])
+                
+                days_until = (this_year_birthday - today).days
+                if 0 <= days_until <= days:
+                    upcoming.append({
+                        **bday,
+                        'days_until': days_until
+                    })
+            except ValueError:
+                # Invalid date (e.g., Feb 29 on non-leap year)
+                continue
+        
+        return sorted(upcoming, key=lambda x: x['days_until'])
+
+    async def get_total_manual_wishes(self):
+        """Get total count of manual wishes"""
+        return await self.manual_wishes.count_documents({})
+
 db_manager = DatabaseManager()

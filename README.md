@@ -21,6 +21,15 @@ A Discord bot designed to bring joy and celebration to your server by automatica
 - **Birthday Management**: View and manage user birthdays
 - **Channel Configuration**: Dedicated channels for different types of announcements
 
+### 🌐 Web Dashboard
+- **Analytics Dashboard**: Comprehensive statistics about birthdays, wishes, and upcoming events
+- **Birthday Management**: Browse, search, and delete registered birthdays
+- **Wish Management**: View and delete custom wishes
+- **Visual Charts**: Birthday distribution by month visualization
+- **Secure Access**: Password-protected admin interface
+- **Responsive Design**: Works on desktop and mobile devices
+- **RESTful API**: JSON endpoints for external integrations
+
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -76,6 +85,18 @@ A Discord bot designed to bring joy and celebration to your server by automatica
    python main.py
    ```
 
+5. **Run the web dashboard (optional)**
+   ```bash
+   python run_web.py
+   ```
+   
+   Or directly:
+   ```bash
+   python web/app.py
+   ```
+   
+   Then access the dashboard at `http://localhost:5000` (default password: `admin`)
+
 ## 📖 Usage
 
 ### For Users
@@ -87,6 +108,12 @@ A Discord bot designed to bring joy and celebration to your server by automatica
 - Use the wish modal system to create custom birthday and festival messages
 - Monitor the staff alerts channel for birthday notifications
 - Manage birthday roles and announcements
+
+### Web Dashboard
+- Access the web management interface at `http://localhost:5000` (or your configured host/port)
+- View analytics and statistics
+- Manage birthdays and custom wishes
+- Monitor upcoming celebrations
 
 ## 🏗️ Project Structure
 
@@ -103,6 +130,15 @@ Mangalify/
 │   ├── __init__.py
 │   ├── api_client.py      # External API integrations
 │   └── db_manager.py      # Database operations
+├── web/
+│   ├── app.py             # Flask web application
+│   ├── templates/         # HTML templates
+│   │   ├── base.html
+│   │   ├── index.html
+│   │   ├── analytics.html
+│   │   ├── birthdays.html
+│   │   └── wishes.html
+│   └── static/            # Static files (CSS, JS, images)
 └── tests/
     └── test.py            # Unit tests
 ```
@@ -125,6 +161,11 @@ Mangalify/
 | `GEMINI_API_KEY` | Google Gemini API key | No | - |
 | `CALENDARIFIC_API_KEY` | Calendarific API key | No | - |
 | `CALENDARIFIC_COUNTRY_CODE` | Country code for holidays | No | US |
+| `WEB_PORT` | Web dashboard port | No | 5000 |
+| `WEB_HOST` | Web dashboard host | No | 0.0.0.0 |
+| `WEB_DEBUG` | Enable Flask debug mode | No | False |
+| `WEB_SECRET_KEY` | Secret key for web sessions | Yes (for web) | - |
+| `WEB_ADMIN_PASSWORD` | Admin password for dashboard | Yes (for web) | admin |
 
 ### Setting up Discord Bot
 
@@ -138,6 +179,28 @@ Mangalify/
    - Manage Roles
    - Read Message History
    - View Channels
+
+### Web Dashboard Setup
+
+The web dashboard provides a user-friendly interface for managing your bot:
+
+**Features:**
+- 📊 **Analytics Dashboard**: View comprehensive statistics about birthdays, wishes, and upcoming events
+- 🎂 **Birthday Management**: Browse and manage all registered birthdays
+- 💝 **Wish Management**: View and delete custom wishes
+- 🔒 **Secure Access**: Password-protected admin interface
+
+**Access:**
+1. Set `WEB_ADMIN_PASSWORD` in your `.env` file
+2. Run `python web/app.py`
+3. Open your browser to `http://localhost:5000`
+4. Login with your admin password
+
+**Security Notes:**
+- Always use a strong password for `WEB_ADMIN_PASSWORD`
+- Set `WEB_SECRET_KEY` to a random string in production
+- Consider using a reverse proxy (nginx/Apache) if exposing to the internet
+- Enable HTTPS for production deployments
 
 ## 🧪 Testing
 

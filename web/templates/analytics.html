@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}Analytics - Mangalify Dashboard{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Overview Statistics</h2>
+    <div class="stats-grid">
+        <div class="stat-card">
+            <h3>Total Birthdays Registered</h3>
+            <div class="value">{{ total_birthdays }}</div>
+        </div>
+        <div class="stat-card">
+            <h3>Custom Wishes</h3>
+            <div class="value">{{ total_wishes }}</div>
+        </div>
+        <div class="stat-card">
+            <h3>Upcoming Birthdays (30 days)</h3>
+            <div class="value">{{ upcoming_birthdays|length }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Birthdays by Month</h2>
+    <canvas id="monthChart" style="max-height: 300px;"></canvas>
+</div>
+
+<div class="card">
+    <h2>Upcoming Birthdays (Next 30 Days)</h2>
+    {% if upcoming_birthdays %}
+    <table>
+        <thead>
+            <tr>
+                <th>User ID</th>
+                <th>Birthday</th>
+                <th>Days Until</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for birthday in upcoming_birthdays %}
+            <tr>
+                <td>{{ birthday._id }}</td>
+                <td>{{ birthday.day }}/{{ birthday.month }}/{{ birthday.year }}</td>
+                <td>
+                    {% if birthday.days_until == 0 %}
+                        <span style="color: #28a745; font-weight: bold;">Today! 🎉</span>
+                    {% elif birthday.days_until == 1 %}
+                        <span style="color: #ffc107; font-weight: bold;">Tomorrow</span>
+                    {% else %}
+                        {{ birthday.days_until }} days
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+        <p>No upcoming birthdays in the next 30 days</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // Prepare data for the chart
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const birthdaysByMonth = {{ birthdays_by_month|tojson }};
+    
+    // Create array with all months initialized to 0
+    const monthData = Array(12).fill(0);
+    
+    // Fill in actual data
+    birthdaysByMonth.forEach(item => {
+        monthData[item._id - 1] = item.count;
+    });
+    
+    // Create the chart
+    const ctx = document.getElementById('monthChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: monthNames,
+            datasets: [{
+                label: 'Number of Birthdays',
+                data: monthData,
+                backgroundColor: 'rgba(102, 126, 234, 0.6)',
+                borderColor: 'rgba(102, 126, 234, 1)',
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        stepSize: 1
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: false
+                },
+                title: {
+                    display: false
+                }
+            }
+        }
+    });
+</script>
+{% endblock %}
