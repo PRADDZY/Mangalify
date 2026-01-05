@@ -3,6 +3,7 @@
 import os
 import asyncio
 import logging
+import json
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
@@ -63,10 +64,35 @@ def validate_environment():
 def configure_logging():
     level_name = os.getenv("LOG_LEVEL", "INFO").upper()
     level = getattr(logging, level_name, logging.INFO)
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
-    )
+    log_format = os.getenv("LOG_FORMAT", "plain").lower()
+
+    class JsonFormatter(logging.Formatter):
+        def format(self, record: logging.LogRecord) -> str:
+            payload = {
+                "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
+                "level": record.levelname,
+                "logger": record.name,
+                "msg": record.getMessage(),
+            }
+            if record.args and isinstance(record.args, dict):
+                payload.update(record.args)
+            # Include any "extra" fields stored on the record
+            for key, value in record.__dict__.items():
+                if key.startswith('_') or key in ("args", "msg", "levelname", "name", "pathname", "filename", "module", "exc_info", "exc_text", "stack_info", "lineno", "funcName", "created", "msecs", "relativeCreated", "thread", "threadName", "processName", "process"):
+                    continue
+                if key not in payload:
+                    payload[key] = value
+            return json.dumps(payload, ensure_ascii=True)
+
+    if log_format == "json":
+        handler = logging.StreamHandler()
+        handler.setFormatter(JsonFormatter())
+        logging.basicConfig(level=level, handlers=[handler])
+    else:
+        logging.basicConfig(
+            level=level,
+            format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+        )
 
 class WishesBot(commands.Bot):
     def __init__(self):
