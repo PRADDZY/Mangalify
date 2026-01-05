@@ -2,11 +2,14 @@
 
 import os
 import asyncio
+import logging
 import aiohttp
 from dotenv import load_dotenv
 import google.generativeai as genai
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 class ApiClient:
     def __init__(self):
@@ -34,10 +37,10 @@ class ApiClient:
                 return await coro_factory()
             except Exception as exc:
                 if attempt == self._max_retries:
-                    print(f"❌ {label} failed after {attempt} attempts: {exc}")
+                    logger.error("%s failed after %s attempts: %s", label, attempt, exc)
                     raise
                 sleep_for = self._backoff_base * (2 ** (attempt - 1))
-                print(f"⚠️ {label} attempt {attempt} failed: {exc}; retrying in {sleep_for:.2f}s")
+                logger.warning("%s attempt %s failed: %s; retrying in %.2fs", label, attempt, exc, sleep_for)
                 await asyncio.sleep(sleep_for)
 
     async def get_holidays(self, year: int, month: int):
@@ -60,7 +63,7 @@ class ApiClient:
 
             return await self._with_retry("Calendarific fetch", _fetch)
         except Exception as e:
-            print(f"An exception occurred while fetching holidays: {e}")
+            logger.error("Exception while fetching holidays: %s", e)
             return None
 
     async def generate_wish_text(self, holiday_name: str):
@@ -82,7 +85,7 @@ class ApiClient:
 
             return await self._with_retry("Gemini holiday wish", _gen)
         except Exception as e:
-            print(f"An error occurred while calling the Gemini API for a holiday wish: {e}")
+            logger.error("Gemini API error for holiday wish: %s", e)
             return f"Happy {holiday_name}! Wishing everyone a wonderful celebration."
 
     async def generate_birthday_wish_text(self, member_name: str, member_mention: str):
@@ -107,7 +110,7 @@ class ApiClient:
             if text:
                 return text
         except Exception as e:
-            print(f"An error occurred while calling the Gemini API for a birthday wish: {e}")
+            logger.error("Gemini API error for birthday wish: %s", e)
         return f"# 🎉 Happy Birthday, {member_name}! 🎉\n\n> Hope you have a fantastic day filled with joy and laughter!\n\nEveryone, please wish a happy birthday to {member_mention}!"
 
     async def close_session(self):

@@ -1,6 +1,7 @@
 # cogs/wishes.py
 
 import os
+import logging
 import discord
 from discord import app_commands, ui
 from discord.ext import commands, tasks
@@ -10,6 +11,8 @@ import pytz
 from utils.db_manager import db_manager
 from utils.api_client import api_client
 
+logger = logging.getLogger(__name__)
+
 # Simple helper to avoid repeating message send error handling
 async def _safe_send(channel: discord.abc.Messageable | None, content: str):
     if not channel:
@@ -17,7 +20,7 @@ async def _safe_send(channel: discord.abc.Messageable | None, content: str):
     try:
         await channel.send(content)
     except Exception as exc:
-        print(f"⚠️ Failed to send message to channel {getattr(channel, 'id', 'unknown')}: {exc}")
+        logger.warning("Failed to send message to channel %s: %s", getattr(channel, 'id', 'unknown'), exc)
 
 GUILD_ID = int(os.getenv("GUILD_ID"))
 STAFF_ROLE_ID = int(os.getenv("STAFF_ROLE_ID"))
@@ -74,7 +77,7 @@ class Wishes(commands.Cog):
     @tasks.loop(time=POST_TIME)
     async def daily_task(self):
         today = datetime.now(SERVER_TIMEZONE)
-        print(f"[{today.strftime('%Y-%m-%d %H:%M:%S')}] Running daily task...")
+        logger.info("Running daily task at %s", today.strftime('%Y-%m-%d %H:%M:%S'))
         alerts_channel = self.bot.get_channel(STAFF_ALERTS_CHANNEL_ID)
         try:
             removed_roles = await self._cleanup_birthday_roles(today)
@@ -85,9 +88,10 @@ class Wishes(commands.Cog):
                 f"Next run: {self._next_run_time_str()} ({SERVER_TIMEZONE_STR})"
             )
             await _safe_send(alerts_channel, summary)
+            await self._store_scheduler_meta(next_run=self._next_run_time_iso(), last_run=today.astimezone(SERVER_TIMEZONE).isoformat())
         except Exception as exc:
             await _safe_send(self.bot.get_channel(STAFF_ALERTS_CHANNEL_ID), f"❌ Daily task failed: {exc}")
-            print(f"❌ Daily task encountered an error: {exc}")
+            logger.exception("Daily task encountered an error: %s", exc)
 
     @daily_task.before_loop
     async def before_daily_task(self):
@@ -101,7 +105,7 @@ class Wishes(commands.Cog):
     async def _check_for_holidays(self, today: datetime):
         alerts_channel = self.bot.get_channel(STAFF_ALERTS_CHANNEL_ID)
         if not alerts_channel:
-            print("⚠️ STAFF_ALERTS_CHANNEL_ID is not configured or not found.")
+            logger.warning("STAFF_ALERTS_CHANNEL_ID is not configured or not found.")
         holidays = await api_client.get_holidays(today.year, today.month)
         if holidays is None:
             if alerts_channel: await alerts_channel.send("⚠️ **API Error:** Could not fetch holidays (Calendarific unreachable or misconfigured).")
@@ -115,7 +119,6 @@ class Wishes(commands.Cog):
 
         sent = 0
         for holiday_name in todays_holidays_names:
-            await self._store_scheduler_meta(next_run=self._next_run_time_iso(), last_run=today.astimezone(SERVER_TIMEZONE).isoformat())
             wish_text = await api_client.generate_wish_text(holiday_name)
             wishes_channel = self.bot.get_channel(WISHES_CHANNEL_ID)
             
@@ -153,7 +156,7 @@ class Wishes(commands.Cog):
                     
                     await db_manager.add_user_to_role_log(birthday_data['_id'], today.strftime('%Y-%m-%d'))
                 except Exception as e:
-                    print(f"❌ UNEXPECTED ERROR during birthday announcement for {member.display_name}: {e}")
+                    logger.exception("Unexpected error during birthday announcement for %s: %s", member.display_name, e)
         return sent
 
     async def _cleanup_birthday_roles(self, today: datetime):
@@ -191,13 +194,13 @@ class Wishes(commands.Cog):
         try:
             await db_manager.upsert_scheduler_meta("daily_task", next_run_at=next_run, last_run_at=last_run)
         except Exception as exc:
-            print(f"⚠️ Failed to store scheduler meta: {exc}")
+            logger.warning("Failed to store scheduler meta: %s", exc)
 
     async def _get_scheduler_meta(self):
         try:
             return await db_manager.get_scheduler_meta("daily_task")
         except Exception as exc:
-            print(f"⚠️ Failed to load scheduler meta: {exc}")
+            logger.warning("Failed to load scheduler meta: %s", exc)
             return None
 
     # ... (no changes to Staff Commands)

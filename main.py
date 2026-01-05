@@ -2,6 +2,7 @@
 
 import os
 import asyncio
+import logging
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
@@ -58,6 +59,15 @@ def validate_environment():
 
     _validate_post_time()
 
+
+def configure_logging():
+    level_name = os.getenv("LOG_LEVEL", "INFO").upper()
+    level = getattr(logging, level_name, logging.INFO)
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+    )
+
 class WishesBot(commands.Bot):
     def __init__(self):
         # Define necessary intents
@@ -90,6 +100,7 @@ class WishesBot(commands.Bot):
 
 async def main():
     validate_environment()
+    configure_logging()
     bot = WishesBot()
     async with bot:
         await bot.start(BOT_TOKEN)
