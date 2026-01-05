@@ -16,6 +16,7 @@ class DatabaseManager:
         self.birthdays = self.db.birthdays
         self.manual_wishes = self.db.manual_wishes
         self.birthday_role_log = self.db.birthday_role_log
+        self.scheduler_meta = self.db.scheduler_meta
 
     # --- Birthday Methods ---
     async def set_birthday(self, user_id: int, day: int, month: int, year: int):
@@ -49,6 +50,20 @@ class DatabaseManager:
     
     async def remove_user_from_role_log(self, user_id: int):
         await self.birthday_role_log.delete_one({"_id": user_id})
+
+    # --- Scheduler Metadata ---
+    async def upsert_scheduler_meta(self, name: str, next_run_at: str | None, last_run_at: str | None):
+        update = {}
+        if next_run_at is not None:
+            update["next_run_at"] = next_run_at
+        if last_run_at is not None:
+            update["last_run_at"] = last_run_at
+        if not update:
+            return
+        await self.scheduler_meta.update_one({"_id": name}, {"$set": update}, upsert=True)
+
+    async def get_scheduler_meta(self, name: str):
+        return await self.scheduler_meta.find_one({"_id": name})
 
     # --- Manual Wish Methods (can be expanded) ---
     async def add_manual_wish(self, name: str, day: int, month: int, year: int, message: str, role_id: int):

@@ -92,7 +92,11 @@ class Wishes(commands.Cog):
     @daily_task.before_loop
     async def before_daily_task(self):
         await self.bot.wait_until_ready()
-        await _safe_send(self.bot.get_channel(STAFF_ALERTS_CHANNEL_ID), f"ℹ️ Daily task scheduled. Next run: {self._next_run_time_str()} ({SERVER_TIMEZONE_STR})")
+        alerts_channel = self.bot.get_channel(STAFF_ALERTS_CHANNEL_ID)
+        last_meta = await self._get_scheduler_meta()
+        last_run = last_meta.get("last_run_at") if last_meta else "unknown"
+        next_run = self._next_run_time_str()
+        await _safe_send(alerts_channel, f"ℹ️ Daily task scheduled. Next run: {next_run} ({SERVER_TIMEZONE_STR}) | Last run: {last_run}")
 
     async def _check_for_holidays(self, today: datetime):
         alerts_channel = self.bot.get_channel(STAFF_ALERTS_CHANNEL_ID)
@@ -111,6 +115,7 @@ class Wishes(commands.Cog):
 
         sent = 0
         for holiday_name in todays_holidays_names:
+            await self._store_scheduler_meta(next_run=self._next_run_time_iso(), last_run=today.astimezone(SERVER_TIMEZONE).isoformat())
             wish_text = await api_client.generate_wish_text(holiday_name)
             wishes_channel = self.bot.get_channel(WISHES_CHANNEL_ID)
             
@@ -174,6 +179,26 @@ class Wishes(commands.Cog):
         if target <= now:
             target = target + timedelta(days=1)
         return target.strftime('%Y-%m-%d %H:%M')
+
+    def _next_run_time_iso(self) -> str:
+        now = datetime.now(SERVER_TIMEZONE)
+        target = now.replace(hour=POST_TIME.hour, minute=POST_TIME.minute, second=0, microsecond=0)
+        if target <= now:
+            target = target + timedelta(days=1)
+        return target.isoformat()
+
+    async def _store_scheduler_meta(self, next_run: str | None, last_run: str | None):
+        try:
+            await db_manager.upsert_scheduler_meta("daily_task", next_run_at=next_run, last_run_at=last_run)
+        except Exception as exc:
+            print(f"⚠️ Failed to store scheduler meta: {exc}")
+
+    async def _get_scheduler_meta(self):
+        try:
+            return await db_manager.get_scheduler_meta("daily_task")
+        except Exception as exc:
+            print(f"⚠️ Failed to load scheduler meta: {exc}")
+            return None
 
     # ... (no changes to Staff Commands)
     @app_commands.command(name="add_wish", description="[STAFF] Add a custom wish for a specific date.")
