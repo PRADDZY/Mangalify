@@ -1,6 +1,7 @@
 # utils/api_client.py
 
 import os
+import asyncio
 import aiohttp
 from dotenv import load_dotenv
 import google.generativeai as genai
@@ -19,9 +20,25 @@ class ApiClient:
         self.calendarific_country = os.getenv("CALENDARIFIC_COUNTRY_CODE")
         self._session = None
 
+        self._max_retries = 3
+        self._backoff_base = 0.5  # seconds
+
     async def _get_session(self):
         if self._session is None: self._session = aiohttp.ClientSession()
         return self._session
+
+    async def _with_retry(self, label: str, coro_factory):
+        """Retry an async operation with exponential backoff."""
+        for attempt in range(1, self._max_retries + 1):
+            try:
+                return await coro_factory()
+            except Exception as exc:
+                if attempt == self._max_retries:
+                    print(f"❌ {label} failed after {attempt} attempts: {exc}")
+                    raise
+                sleep_for = self._backoff_base * (2 ** (attempt - 1))
+                print(f"⚠️ {label} attempt {attempt} failed: {exc}; retrying in {sleep_for:.2f}s")
+                await asyncio.sleep(sleep_for)
 
     async def get_holidays(self, year: int, month: int):
         if not self.calendarific_api_key:
@@ -33,14 +50,18 @@ class ApiClient:
         )
         try:
             session = await self._get_session()
-            async with session.get(url, timeout=10) as response:
-                if response.status == 200:
+
+            async def _fetch():
+                async with session.get(url, timeout=10) as response:
+                    if response.status != 200:
+                        raise RuntimeError(f"Calendarific status {response.status}")
                     data = await response.json()
                     return data.get("response", {}).get("holidays", [])
-                print(f"Calendarific returned status {response.status} for {url}")
+
+            return await self._with_retry("Calendarific fetch", _fetch)
         except Exception as e:
             print(f"An exception occurred while fetching holidays: {e}")
-        return None
+            return None
 
     async def generate_wish_text(self, holiday_name: str):
         if not self.gemini_model: return None
@@ -55,11 +76,14 @@ class ApiClient:
         )
 
         try:
-            response = await self.gemini_model.generate_content_async(prompt)
-            return response.text.strip() if response.parts else None
+            async def _gen():
+                response = await self.gemini_model.generate_content_async(prompt)
+                return response.text.strip() if response.parts else None
+
+            return await self._with_retry("Gemini holiday wish", _gen)
         except Exception as e:
             print(f"An error occurred while calling the Gemini API for a holiday wish: {e}")
-            return None
+            return f"Happy {holiday_name}! Wishing everyone a wonderful celebration."
 
     async def generate_birthday_wish_text(self, member_name: str, member_mention: str):
         if not self.gemini_model: return None
@@ -75,13 +99,16 @@ class ApiClient:
         )
 
         try:
-            response = await self.gemini_model.generate_content_async(prompt)
-            # Fallback message
-            fallback = f"# 🎉 Happy Birthday, {member_name}! 🎉\n\n> Hope you have a fantastic day filled with joy and laughter!\n\nEveryone, please wish a happy birthday to {member_mention}!"
-            return response.text.strip() if response.parts else fallback
+            async def _gen():
+                response = await self.gemini_model.generate_content_async(prompt)
+                return response.text.strip() if response.parts else None
+
+            text = await self._with_retry("Gemini birthday wish", _gen)
+            if text:
+                return text
         except Exception as e:
             print(f"An error occurred while calling the Gemini API for a birthday wish: {e}")
-            return f"# 🎉 Happy Birthday, {member_name}! 🎉\n\n> Hope you have a fantastic day filled with joy and laughter!\n\nEveryone, please wish a happy birthday to {member_mention}!"
+        return f"# 🎉 Happy Birthday, {member_name}! 🎉\n\n> Hope you have a fantastic day filled with joy and laughter!\n\nEveryone, please wish a happy birthday to {member_mention}!"
 
     async def close_session(self):
         if self._session and not self._session.closed:

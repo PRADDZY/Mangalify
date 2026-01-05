@@ -89,7 +89,7 @@ class Wishes(commands.Cog):
             print("⚠️ STAFF_ALERTS_CHANNEL_ID is not configured or not found.")
         holidays = await api_client.get_holidays(today.year, today.month)
         if holidays is None:
-            if alerts_channel: await alerts_channel.send("⚠️ **API Error:** Could not fetch holidays.")
+            if alerts_channel: await alerts_channel.send("⚠️ **API Error:** Could not fetch holidays (Calendarific unreachable or misconfigured).")
             return
 
         todays_holidays_names = [h['name'] for h in holidays if h['date']['iso'] == today.strftime('%Y-%m-%d')]
