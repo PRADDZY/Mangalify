@@ -4,7 +4,7 @@ import os
 import discord
 from discord import app_commands, ui
 from discord.ext import commands, tasks
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 import pytz
 
 from utils.db_manager import db_manager
@@ -60,9 +60,13 @@ class WishModal(ui.Modal, title='Add a Custom Wish'):
         await interaction.response.send_message(f"Custom wish '{self.name.value}' saved.", ephemeral=True)
 
 class Wishes(commands.Cog):
+    _daily_started = False  # class-level guard to avoid duplicate loop starts
+
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.daily_task.start()
+        if not Wishes._daily_started:
+            Wishes._daily_started = True
+            self.daily_task.start()
 
     def cog_unload(self):
         self.daily_task.cancel()
@@ -71,10 +75,16 @@ class Wishes(commands.Cog):
     async def daily_task(self):
         today = datetime.now(SERVER_TIMEZONE)
         print(f"[{today.strftime('%Y-%m-%d %H:%M:%S')}] Running daily task...")
+        alerts_channel = self.bot.get_channel(STAFF_ALERTS_CHANNEL_ID)
         try:
-            await self._cleanup_birthday_roles(today)
-            await self._check_for_birthdays(today)
-            await self._check_for_holidays(today)
+            removed_roles = await self._cleanup_birthday_roles(today)
+            birthday_count = await self._check_for_birthdays(today)
+            holiday_count = await self._check_for_holidays(today)
+            summary = (
+                f"✅ Daily task done | Birthdays: {birthday_count} | Holidays: {holiday_count} | Roles removed: {removed_roles} | "
+                f"Next run: {self._next_run_time_str()} ({SERVER_TIMEZONE_STR})"
+            )
+            await _safe_send(alerts_channel, summary)
         except Exception as exc:
             await _safe_send(self.bot.get_channel(STAFF_ALERTS_CHANNEL_ID), f"❌ Daily task failed: {exc}")
             print(f"❌ Daily task encountered an error: {exc}")
@@ -82,6 +92,7 @@ class Wishes(commands.Cog):
     @daily_task.before_loop
     async def before_daily_task(self):
         await self.bot.wait_until_ready()
+        await _safe_send(self.bot.get_channel(STAFF_ALERTS_CHANNEL_ID), f"ℹ️ Daily task scheduled. Next run: {self._next_run_time_str()} ({SERVER_TIMEZONE_STR})")
 
     async def _check_for_holidays(self, today: datetime):
         alerts_channel = self.bot.get_channel(STAFF_ALERTS_CHANNEL_ID)
@@ -90,7 +101,7 @@ class Wishes(commands.Cog):
         holidays = await api_client.get_holidays(today.year, today.month)
         if holidays is None:
             if alerts_channel: await alerts_channel.send("⚠️ **API Error:** Could not fetch holidays (Calendarific unreachable or misconfigured).")
-            return
+            return 0
 
         todays_holidays_names = [h['name'] for h in holidays if h['date']['iso'] == today.strftime('%Y-%m-%d')]
         if todays_holidays_names:
@@ -98,6 +109,7 @@ class Wishes(commands.Cog):
             log_message = f"ℹ️ **Daily Check:** Found {len(todays_holidays_names)} holiday(s): {holiday_list_str}."
             if alerts_channel: await alerts_channel.send(log_message)
 
+        sent = 0
         for holiday_name in todays_holidays_names:
             wish_text = await api_client.generate_wish_text(holiday_name)
             wishes_channel = self.bot.get_channel(WISHES_CHANNEL_ID)
@@ -105,8 +117,11 @@ class Wishes(commands.Cog):
             # FIX: Send raw markdown text instead of an embed
             if wish_text:
                 await _safe_send(wishes_channel, wish_text)
+                sent += 1
             elif alerts_channel:
                 await alerts_channel.send(f"⚠️ **API Error:** Failed to generate wish text for **{holiday_name}**.")
+
+        return sent
 
     async def _check_for_birthdays(self, today: datetime):
         guild = self.bot.get_guild(GUILD_ID)
@@ -114,9 +129,10 @@ class Wishes(commands.Cog):
         birthday_role = guild.get_role(BIRTHDAY_ROLE_ID) if guild else None
         if not all([guild, birthday_channel, birthday_role]):
             await _safe_send(self.bot.get_channel(STAFF_ALERTS_CHANNEL_ID), "⚠️ Birthday check skipped: guild/channel/role missing.")
-            return
+            return 0
 
         cursor = db_manager.get_birthdays_for_date(today.day, today.month)
+        sent = 0
         async for birthday_data in cursor:
             member = guild.get_member(birthday_data['_id'])
             if member:
@@ -128,10 +144,12 @@ class Wishes(commands.Cog):
                     # FIX: Send raw markdown text instead of an embed
                     if birthday_message:
                         await _safe_send(birthday_channel, birthday_message)
+                        sent += 1
                     
                     await db_manager.add_user_to_role_log(birthday_data['_id'], today.strftime('%Y-%m-%d'))
                 except Exception as e:
                     print(f"❌ UNEXPECTED ERROR during birthday announcement for {member.display_name}: {e}")
+        return sent
 
     async def _cleanup_birthday_roles(self, today: datetime):
         # ... (no changes here)
@@ -139,12 +157,23 @@ class Wishes(commands.Cog):
         birthday_role = guild.get_role(BIRTHDAY_ROLE_ID) if guild else None
         if not guild or not birthday_role: return
         cursor = await db_manager.get_users_with_birthday_role()
+        removed = 0
         async for user_log in cursor:
             if user_log.get('date_added') != today.strftime('%Y-%m-%d'):
                 member = guild.get_member(user_log['_id'])
                 if member and birthday_role in member.roles:
                     await member.remove_roles(birthday_role, reason="Birthday ended")
+                    removed += 1
                 await db_manager.remove_user_from_role_log(user_log['_id'])
+        return removed
+
+    def _next_run_time_str(self) -> str:
+        """Compute next run time for the daily task in server timezone."""
+        now = datetime.now(SERVER_TIMEZONE)
+        target = now.replace(hour=POST_TIME.hour, minute=POST_TIME.minute, second=0, microsecond=0)
+        if target <= now:
+            target = target + timedelta(days=1)
+        return target.strftime('%Y-%m-%d %H:%M')
 
     # ... (no changes to Staff Commands)
     @app_commands.command(name="add_wish", description="[STAFF] Add a custom wish for a specific date.")
