@@ -6,7 +6,9 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 
-load_dotenv()
+# Allow tests/CI to bypass local .env loading
+if os.getenv("LOAD_DOTENV", "true").lower() == "true":
+    load_dotenv()
 
 BOT_TOKEN = None  # Populated after validation
 GUILD_ID = None   # Populated after validation

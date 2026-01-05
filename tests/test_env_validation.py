@@ -17,6 +17,7 @@ def reload_main():
 
 
 def test_validate_environment_success(monkeypatch):
+    monkeypatch.setenv("LOAD_DOTENV", "false")
     monkeypatch.setenv("BOT_TOKEN", "token")
     monkeypatch.setenv("GUILD_ID", "1")
     monkeypatch.setenv("STAFF_ROLE_ID", "2")
@@ -34,6 +35,7 @@ def test_validate_environment_success(monkeypatch):
 
 
 def test_validate_environment_missing(monkeypatch):
+    monkeypatch.setenv("LOAD_DOTENV", "false")
     # Unset required vars
     for key in [
         "BOT_TOKEN",
@@ -54,6 +56,7 @@ def test_validate_environment_missing(monkeypatch):
 
 
 def test_validate_environment_invalid_time(monkeypatch):
+    monkeypatch.setenv("LOAD_DOTENV", "false")
     monkeypatch.setenv("BOT_TOKEN", "token")
     monkeypatch.setenv("GUILD_ID", "1")
     monkeypatch.setenv("STAFF_ROLE_ID", "2")
