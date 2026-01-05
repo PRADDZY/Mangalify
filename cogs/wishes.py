@@ -210,7 +210,14 @@ class Wishes(commands.Cog):
     @app_commands.checks.has_role(STAFF_ROLE_ID)
     async def status(self, interaction: discord.Interaction):
         latency = round(self.bot.latency * 1000)
-        await interaction.response.send_message(f"Bot is online. Latency: {latency}ms.", ephemeral=True)
+        meta = await self._get_scheduler_meta()
+        last_run = meta.get("last_run_at") if meta else "unknown"
+        next_run = meta.get("next_run_at") if meta else "unknown"
+        await interaction.response.send_message(
+            f"Bot is online. Latency: {latency}ms.\n"
+            f"Daily task — Last run: {last_run}, Next run: {next_run}",
+            ephemeral=True,
+        )
     
     @add_wish.error
     @status.error
