@@ -1,6 +1,7 @@
 # cogs/wishes.py
 
 import os
+import re
 import logging
 import discord
 from discord import app_commands, ui
@@ -30,6 +31,7 @@ BIRTHDAY_CHANNEL_ID = int(os.getenv("BIRTHDAY_CHANNEL_ID"))
 STAFF_ALERTS_CHANNEL_ID = int(os.getenv("STAFF_ALERTS_CHANNEL_ID"))
 POST_TIME_UTC_STR = os.getenv("POST_TIME_UTC", "00:01")
 SERVER_TIMEZONE_STR = os.getenv("SERVER_TIMEZONE", "UTC")
+HOLIDAY_APPROVAL_MODE = os.getenv("HOLIDAY_APPROVAL_MODE", "false").lower() == "true"
 
 try:
     utc_time_parts = list(map(int, POST_TIME_UTC_STR.split(':')))
@@ -149,8 +151,16 @@ class Wishes(commands.Cog):
             
             # FIX: Send raw markdown text instead of an embed
             if wish_text:
-                await _safe_send(wishes_channel, wish_text)
-                sent += 1
+                safe_text = self._guard_message(wish_text, kind="holiday", name=holiday_name)
+                if HOLIDAY_APPROVAL_MODE:
+                    preview = (
+                        f"🔎 Holiday preview for **{holiday_name}** (approval required).\n"
+                        f"Use `/holiday_post holiday_name:<name> content:<text>` to post.\n\n{safe_text}"
+                    )
+                    await _safe_send(alerts_channel, preview)
+                else:
+                    await _safe_send(wishes_channel, safe_text)
+                    sent += 1
             elif alerts_channel:
                 await alerts_channel.send(f"⚠️ **API Error:** Failed to generate wish text for **{holiday_name}**.")
 
@@ -177,7 +187,8 @@ class Wishes(commands.Cog):
                     
                     # FIX: Send raw markdown text instead of an embed
                     if birthday_message:
-                        await _safe_send(birthday_channel, birthday_message)
+                        safe_text = self._guard_message(birthday_message, kind="birthday", name=member.display_name)
+                        await _safe_send(birthday_channel, safe_text)
                         sent += 1
                     
                     await db_manager.add_user_to_role_log(birthday_data['_id'], today.strftime('%Y-%m-%d'))
@@ -200,6 +211,19 @@ class Wishes(commands.Cog):
                     removed += 1
                 await db_manager.remove_user_from_role_log(user_log['_id'])
         return removed
+
+    def _guard_message(self, text: str, kind: str, name: str) -> str:
+        """Apply basic safety filters and length cap."""
+        if not text:
+            return ""
+        bad_words = ["fuck", "shit", "bitch", "bastard", "damn"]
+        sanitized = text
+        for bad in bad_words:
+            sanitized = re.sub(bad, "***", sanitized, flags=re.IGNORECASE)
+        max_len = 900
+        if len(sanitized) > max_len:
+            sanitized = sanitized[:max_len] + "..."
+        return sanitized
 
     async def _cleanup_departed_members(self):
         guild = self.bot.get_guild(GUILD_ID)
@@ -264,6 +288,18 @@ class Wishes(commands.Cog):
             f"Daily task — Last run: {last_run}, Next run: {next_run}",
             ephemeral=True,
         )
+
+    @app_commands.command(name="holiday_post", description="[STAFF] Post an approved holiday wish to the channel.")
+    @app_commands.checks.has_role(STAFF_ROLE_ID)
+    @app_commands.describe(holiday_name="Name of the holiday", content="Message to post")
+    async def holiday_post(self, interaction: discord.Interaction, holiday_name: str, content: str):
+        wishes_channel = self.bot.get_channel(WISHES_CHANNEL_ID)
+        if not wishes_channel:
+            await interaction.response.send_message("Wishes channel not configured.", ephemeral=True)
+            return
+        safe_text = self._guard_message(content, kind="holiday_manual", name=holiday_name)
+        await wishes_channel.send(safe_text)
+        await interaction.response.send_message(f"Posted holiday wish for {holiday_name}.", ephemeral=True)
     
     @add_wish.error
     @status.error
