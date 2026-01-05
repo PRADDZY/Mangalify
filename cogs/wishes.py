@@ -10,6 +10,15 @@ import pytz
 from utils.db_manager import db_manager
 from utils.api_client import api_client
 
+# Simple helper to avoid repeating message send error handling
+async def _safe_send(channel: discord.abc.Messageable | None, content: str):
+    if not channel:
+        return
+    try:
+        await channel.send(content)
+    except Exception as exc:
+        print(f"⚠️ Failed to send message to channel {getattr(channel, 'id', 'unknown')}: {exc}")
+
 GUILD_ID = int(os.getenv("GUILD_ID"))
 STAFF_ROLE_ID = int(os.getenv("STAFF_ROLE_ID"))
 BIRTHDAY_ROLE_ID = int(os.getenv("BIRTHDAY_ROLE_ID"))
@@ -62,9 +71,13 @@ class Wishes(commands.Cog):
     async def daily_task(self):
         today = datetime.now(SERVER_TIMEZONE)
         print(f"[{today.strftime('%Y-%m-%d %H:%M:%S')}] Running daily task...")
-        await self._cleanup_birthday_roles(today)
-        await self._check_for_birthdays(today)
-        await self._check_for_holidays(today)
+        try:
+            await self._cleanup_birthday_roles(today)
+            await self._check_for_birthdays(today)
+            await self._check_for_holidays(today)
+        except Exception as exc:
+            await _safe_send(self.bot.get_channel(STAFF_ALERTS_CHANNEL_ID), f"❌ Daily task failed: {exc}")
+            print(f"❌ Daily task encountered an error: {exc}")
 
     @daily_task.before_loop
     async def before_daily_task(self):
@@ -72,6 +85,8 @@ class Wishes(commands.Cog):
 
     async def _check_for_holidays(self, today: datetime):
         alerts_channel = self.bot.get_channel(STAFF_ALERTS_CHANNEL_ID)
+        if not alerts_channel:
+            print("⚠️ STAFF_ALERTS_CHANNEL_ID is not configured or not found.")
         holidays = await api_client.get_holidays(today.year, today.month)
         if holidays is None:
             if alerts_channel: await alerts_channel.send("⚠️ **API Error:** Could not fetch holidays.")
@@ -88,16 +103,18 @@ class Wishes(commands.Cog):
             wishes_channel = self.bot.get_channel(WISHES_CHANNEL_ID)
             
             # FIX: Send raw markdown text instead of an embed
-            if wish_text and wishes_channel:
-                await wishes_channel.send(wish_text)
-            elif not wish_text and alerts_channel:
+            if wish_text:
+                await _safe_send(wishes_channel, wish_text)
+            elif alerts_channel:
                 await alerts_channel.send(f"⚠️ **API Error:** Failed to generate wish text for **{holiday_name}**.")
 
     async def _check_for_birthdays(self, today: datetime):
         guild = self.bot.get_guild(GUILD_ID)
         birthday_channel = self.bot.get_channel(BIRTHDAY_CHANNEL_ID)
         birthday_role = guild.get_role(BIRTHDAY_ROLE_ID) if guild else None
-        if not all([guild, birthday_channel, birthday_role]): return
+        if not all([guild, birthday_channel, birthday_role]):
+            await _safe_send(self.bot.get_channel(STAFF_ALERTS_CHANNEL_ID), "⚠️ Birthday check skipped: guild/channel/role missing.")
+            return
 
         cursor = db_manager.get_birthdays_for_date(today.day, today.month)
         async for birthday_data in cursor:
@@ -110,7 +127,7 @@ class Wishes(commands.Cog):
                     
                     # FIX: Send raw markdown text instead of an embed
                     if birthday_message:
-                        await birthday_channel.send(birthday_message)
+                        await _safe_send(birthday_channel, birthday_message)
                     
                     await db_manager.add_user_to_role_log(birthday_data['_id'], today.strftime('%Y-%m-%d'))
                 except Exception as e:
@@ -154,4 +171,3 @@ class Wishes(commands.Cog):
 async def setup(bot: commands.Bot):
     cog = Wishes(bot)
     await bot.add_cog(cog)
-    cog.daily_task.start()

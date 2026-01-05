@@ -8,9 +8,53 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Load essential variables from .env
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-GUILD_ID = int(os.getenv("GUILD_ID"))
+BOT_TOKEN = None  # Populated after validation
+GUILD_ID = None   # Populated after validation
+
+
+def _require_env(name: str, cast=str):
+    """Fetch and cast an environment variable, failing fast with a clear message."""
+    raw_value = os.getenv(name)
+    if raw_value in (None, ""):
+        raise SystemExit(f"Missing required environment variable: {name}")
+    try:
+        return cast(raw_value)
+    except Exception:
+        raise SystemExit(f"Invalid value for {name}: expected {cast.__name__}")
+
+
+def _validate_post_time():
+    value = os.getenv("POST_TIME_UTC", "00:01")
+    parts = value.split(":")
+    if len(parts) != 2:
+        raise SystemExit("POST_TIME_UTC must be in HH:MM format (e.g., 00:01)")
+    hour, minute = parts
+    if not (hour.isdigit() and minute.isdigit()):
+        raise SystemExit("POST_TIME_UTC must contain only digits (HH:MM)")
+    hour_i, minute_i = int(hour), int(minute)
+    if not (0 <= hour_i <= 23 and 0 <= minute_i <= 59):
+        raise SystemExit("POST_TIME_UTC must be a valid 24h time (00:00-23:59)")
+
+
+def validate_environment():
+    """Fail fast if required configuration is missing or malformed."""
+    global BOT_TOKEN, GUILD_ID
+
+    BOT_TOKEN = _require_env("BOT_TOKEN", str)
+    GUILD_ID = _require_env("GUILD_ID", int)
+
+    # Validate other required IDs early so cogs don't fail at import time
+    required_ints = [
+        "STAFF_ROLE_ID",
+        "BIRTHDAY_ROLE_ID",
+        "WISHES_CHANNEL_ID",
+        "BIRTHDAY_CHANNEL_ID",
+        "STAFF_ALERTS_CHANNEL_ID",
+    ]
+    for name in required_ints:
+        _require_env(name, int)
+
+    _validate_post_time()
 
 class WishesBot(commands.Bot):
     def __init__(self):
@@ -43,6 +87,7 @@ class WishesBot(commands.Bot):
         print('------')
 
 async def main():
+    validate_environment()
     bot = WishesBot()
     async with bot:
         await bot.start(BOT_TOKEN)

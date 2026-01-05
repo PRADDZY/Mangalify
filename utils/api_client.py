@@ -24,8 +24,8 @@ class ApiClient:
         return self._session
 
     async def get_holidays(self, year: int, month: int):
-        # This function does not need to change
-        if not self.calendarific_api_key: return None
+        if not self.calendarific_api_key:
+            return None
         url = (
             f"https://calendarific.com/api/v2/holidays?"
             f"&api_key={self.calendarific_api_key}&country={self.calendarific_country}"
@@ -33,10 +33,11 @@ class ApiClient:
         )
         try:
             session = await self._get_session()
-            async with session.get(url) as response:
+            async with session.get(url, timeout=10) as response:
                 if response.status == 200:
                     data = await response.json()
                     return data.get("response", {}).get("holidays", [])
+                print(f"Calendarific returned status {response.status} for {url}")
         except Exception as e:
             print(f"An exception occurred while fetching holidays: {e}")
         return None
