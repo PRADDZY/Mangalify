@@ -1,6 +1,8 @@
 # cogs/birthdays.py
 
 import os
+import json
+import io
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -75,6 +77,77 @@ class Birthdays(commands.Cog):
         else:
             await interaction.response.send_message("An unexpected error occurred.", ephemeral=True)
             raise error
+
+    @birthday_group.command(name="export", description="[STAFF] Export all birthdays as JSON (user_id/day/month/year).")
+    @app_commands.checks.has_role(STAFF_ROLE_ID)
+    async def export_birthdays(self, interaction: discord.Interaction):
+        cursor = await db_manager.get_all_birthdays()
+        data = []
+        async for doc in cursor:
+            data.append({
+                "user_id": doc.get("_id"),
+                "day": doc.get("day"),
+                "month": doc.get("month"),
+                "year": doc.get("year"),
+            })
+        payload = json.dumps(data, ensure_ascii=True, indent=2)
+        file_obj = io.StringIO(payload)
+        discord_file = discord.File(file_obj, filename="birthdays.json")
+        await interaction.response.send_message("Exported birthdays.", file=discord_file, ephemeral=True)
+
+    @birthday_group.command(name="import_json", description="[STAFF] Import birthdays from JSON array.")
+    @app_commands.checks.has_role(STAFF_ROLE_ID)
+    @app_commands.describe(json_payload="JSON array of objects with user_id, day, month, year")
+    async def import_birthdays(self, interaction: discord.Interaction, json_payload: str):
+        try:
+            items = json.loads(json_payload)
+            if not isinstance(items, list):
+                raise ValueError("Payload must be a JSON array")
+        except Exception as exc:
+            await interaction.response.send_message(f"Invalid JSON: {exc}", ephemeral=True)
+            return
+
+        imported = 0
+        skipped = 0
+        for item in items:
+            try:
+                user_id = int(item.get("user_id"))
+                day = int(item.get("day"))
+                month = int(item.get("month"))
+                year = int(item.get("year"))
+                datetime(year, month, day)  # validate date
+                await db_manager.set_birthday(user_id, day, month, year)
+                imported += 1
+            except Exception:
+                skipped += 1
+                continue
+
+        await interaction.response.send_message(
+            f"Import finished. Added/updated: {imported}. Skipped: {skipped}.",
+            ephemeral=True,
+        )
+
+    @birthday_group.command(name="cleanup_departed", description="[STAFF] Remove birthdays for users no longer in the server.")
+    @app_commands.checks.has_role(STAFF_ROLE_ID)
+    async def cleanup_departed(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        if not guild:
+            await interaction.response.send_message("Cannot run outside a guild context.", ephemeral=True)
+            return
+
+        removed = 0
+        cursor = await db_manager.get_all_birthdays()
+        async for entry in cursor:
+            user_id = entry.get("_id")
+            if not user_id:
+                continue
+            member = guild.get_member(user_id)
+            if member is None:
+                await db_manager.delete_birthday(user_id)
+                await db_manager.remove_user_from_role_log(user_id)
+                removed += 1
+
+        await interaction.response.send_message(f"Cleanup complete. Removed {removed} departed members.", ephemeral=True)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Birthdays(bot))

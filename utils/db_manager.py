@@ -17,6 +17,7 @@ class DatabaseManager:
         self.manual_wishes = self.db.manual_wishes
         self.birthday_role_log = self.db.birthday_role_log
         self.scheduler_meta = self.db.scheduler_meta
+        self._indexes_ensured = False
 
     # --- Birthday Methods ---
     async def set_birthday(self, user_id: int, day: int, month: int, year: int):
@@ -33,6 +34,9 @@ class DatabaseManager:
         result = await self.birthdays.delete_one({"_id": user_id})
         return result.deleted_count > 0
 
+    async def get_all_birthdays(self):
+        return self.birthdays.find({})
+
     # FIX: This function is synchronous, so we remove 'async'
     def get_birthdays_for_date(self, day: int, month: int):
         return self.birthdays.find({"day": day, "month": month})
@@ -46,6 +50,9 @@ class DatabaseManager:
         )
         
     async def get_users_with_birthday_role(self):
+        return self.birthday_role_log.find({})
+
+    async def get_all_role_logs(self):
         return self.birthday_role_log.find({})
     
     async def remove_user_from_role_log(self, user_id: int):
@@ -76,5 +83,14 @@ class DatabaseManager:
             "role_id": role_id
         }
         await self.manual_wishes.insert_one(wish_doc)
+
+    # --- Indexes ---
+    async def ensure_indexes(self):
+        """Create helpful indexes; safe to call multiple times."""
+        if self._indexes_ensured:
+            return
+        await self.birthdays.create_index([("day", 1), ("month", 1)])
+        await self.birthday_role_log.create_index("date_added")
+        self._indexes_ensured = True
 
 db_manager = DatabaseManager()

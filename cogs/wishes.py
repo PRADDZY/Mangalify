@@ -64,6 +64,7 @@ class WishModal(ui.Modal, title='Add a Custom Wish'):
 
 class Wishes(commands.Cog):
     _daily_started = False  # class-level guard to avoid duplicate loop starts
+    _indexes_ready = False
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -84,10 +85,12 @@ class Wishes(commands.Cog):
         alerts_channel = self.bot.get_channel(STAFF_ALERTS_CHANNEL_ID)
         try:
             removed_roles = await self._cleanup_birthday_roles(today)
+            removed_departed = await self._cleanup_departed_members()
             birthday_count = await self._check_for_birthdays(today)
             holiday_count = await self._check_for_holidays(today)
             summary = (
                 f"✅ Daily task done | Birthdays: {birthday_count} | Holidays: {holiday_count} | Roles removed: {removed_roles} | "
+                f"Departed cleaned: {removed_departed} | "
                 f"Next run: {self._next_run_time_str()} ({SERVER_TIMEZONE_STR})"
             )
             await _safe_send(alerts_channel, summary)
@@ -99,6 +102,7 @@ class Wishes(commands.Cog):
                     "birthdays": birthday_count,
                     "holidays": holiday_count,
                     "roles_removed": removed_roles,
+                    "departed_removed": removed_departed,
                     "next_run": self._next_run_time_iso(),
                     "tz": SERVER_TIMEZONE_STR,
                 },
@@ -110,6 +114,12 @@ class Wishes(commands.Cog):
     @daily_task.before_loop
     async def before_daily_task(self):
         await self.bot.wait_until_ready()
+        if not Wishes._indexes_ready:
+            try:
+                await db_manager.ensure_indexes()
+                Wishes._indexes_ready = True
+            except Exception as exc:
+                logger.warning("Failed to ensure indexes", extra={"event": "ensure_indexes_error", "error": str(exc)})
         alerts_channel = self.bot.get_channel(STAFF_ALERTS_CHANNEL_ID)
         last_meta = await self._get_scheduler_meta()
         last_run = last_meta.get("last_run_at") if last_meta else "unknown"
@@ -189,6 +199,23 @@ class Wishes(commands.Cog):
                     await member.remove_roles(birthday_role, reason="Birthday ended")
                     removed += 1
                 await db_manager.remove_user_from_role_log(user_log['_id'])
+        return removed
+
+    async def _cleanup_departed_members(self):
+        guild = self.bot.get_guild(GUILD_ID)
+        if not guild:
+            return 0
+        removed = 0
+        cursor = await db_manager.get_all_birthdays()
+        async for entry in cursor:
+            user_id = entry.get("_id")
+            if not user_id:
+                continue
+            member = guild.get_member(user_id)
+            if member is None:
+                await db_manager.delete_birthday(user_id)
+                await db_manager.remove_user_from_role_log(user_id)
+                removed += 1
         return removed
 
     def _next_run_time_str(self) -> str:
