@@ -139,25 +139,96 @@ Mangalify/
    - Read Message History
    - View Channels
 
+## 🐳 Deployment
+
+### Docker Deployment (Recommended)
+
+1. **Build and run with Docker Compose**:
+   ```bash
+   docker-compose up -d
+   ```
+
+2. **View logs**:
+   ```bash
+   docker logs -f mangalify-bot
+   ```
+
+3. **Stop the bot**:
+   ```bash
+   docker-compose down
+   ```
+
+### Systemd Service (Linux)
+
+1. **Copy service file**:
+   ```bash
+   sudo cp mangalify.service /etc/systemd/system/
+   sudo systemctl daemon-reload
+   ```
+
+2. **Enable and start**:
+   ```bash
+   sudo systemctl enable mangalify
+   sudo systemctl start mangalify
+   ```
+
+3. **Check status**:
+   ```bash
+   sudo systemctl status mangalify
+   sudo journalctl -u mangalify -f
+   ```
+
+See [deployment documentation](./mangalify.service) for detailed systemd configuration.
+
 ## 🧪 Testing
 
 Run the test suite:
 ```bash
-python -m pytest test.py -v
+# Run all tests
+pytest tests/ -v
+
+# Run specific test file
+pytest tests/test_wishes_flows.py -v
+
+# Run with coverage
+pytest tests/ --cov=. --cov-report=html
 ```
 
-Or run with coverage:
+Code linting:
 ```bash
-python -m pytest test.py --cov=. --cov-report=html
+python -m flake8 .
 ```
+
+## 📚 Documentation
+
+- **[API Documentation](API.md)** - Complete API reference, database schema, and integration guide
+- **[Contributing Guide](CONTRIBUTING.md)** - Development setup, code style, and contribution workflow
+- **[Release Notes](RELEASE_NOTES.md)** - Version history and changelog
 
 ## 🤝 Contributing
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details on:
+
+- Setting up development environment
+- Code style and testing guidelines
+- Pull request process
+- Commit message conventions
+
+Quick start:
+```bash
+# Fork and clone
+git clone https://github.com/YOUR_USERNAME/Mangalify.git
+
+# Create feature branch
+git checkout -b feature/amazing-feature
+
+# Make changes, test, and commit
+pytest tests/ -v
+git commit -m 'feat: Add amazing feature'
+
+# Push and create PR
+git push origin feature/amazing-feature
+```
 
 ## 📝 License
 

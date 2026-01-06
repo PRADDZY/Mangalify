@@ -1,0 +1,50 @@
+# Systemd service file for Mangalify Discord Bot
+# Installation:
+#   1. Copy this file to /etc/systemd/system/mangalify.service
+#   2. Update paths and user below
+#   3. sudo systemctl daemon-reload
+#   4. sudo systemctl enable mangalify.service
+#   5. sudo systemctl start mangalify.service
+#
+# Commands:
+#   sudo systemctl status mangalify   # Check status
+#   sudo systemctl restart mangalify  # Restart bot
+#   sudo journalctl -u mangalify -f   # View logs
+
+[Unit]
+Description=Mangalify Discord Bot - Birthday and Festival Automation
+After=network.target mongodb.service
+Wants=mongodb.service
+
+[Service]
+Type=simple
+User=botuser
+Group=botuser
+WorkingDirectory=/opt/mangalify
+ExecStart=/usr/bin/python3 /opt/mangalify/main.py
+
+# Restart configuration
+Restart=always
+RestartSec=10
+StartLimitInterval=200
+StartLimitBurst=5
+
+# Environment
+Environment="LOG_FORMAT=json"
+Environment="LOG_LEVEL=INFO"
+EnvironmentFile=/opt/mangalify/.env
+
+# Security hardening (optional)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/mangalify/logs
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mangalify
+
+[Install]
+WantedBy=multi-user.target
