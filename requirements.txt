@@ -8,3 +8,5 @@ pytest-asyncio
 mongomock-motor
 typing-extensions
 google-generativeai
+prometheus-client
+sentry-sdk

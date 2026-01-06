@@ -7,6 +7,7 @@ import json
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
+import sentry_sdk
 
 # Allow tests/CI to bypass local .env loading
 if os.getenv("LOAD_DOTENV", "true").lower() == "true":
@@ -59,6 +60,17 @@ def validate_environment():
         _require_env(name, int)
 
     _validate_post_time()
+    
+    # Initialize Sentry for error tracking (optional)
+    sentry_dsn = os.getenv("SENTRY_DSN")
+    if sentry_dsn:
+        sentry_sdk.init(
+            dsn=sentry_dsn,
+            traces_sample_rate=0.1,
+            profiles_sample_rate=0.1,
+            environment=os.getenv("ENVIRONMENT", "production"),
+            before_send=lambda event, hint: event  # Customize filtering if needed
+        )
 
 
 def configure_logging():
@@ -123,10 +135,22 @@ class WishesBot(commands.Bot):
     async def on_ready(self):
         print(f'Logged in as {self.user} (ID: {self.user.id})')
         print('------')
+        # Update uptime metric on ready
+        from utils.metrics import set_uptime
+        import time
+        set_uptime(int(time.time()))
 
 async def main():
     validate_environment()
     configure_logging()
+    
+    # Start metrics server in background thread
+    metrics_port = int(os.getenv("METRICS_PORT", "8000"))
+    import threading
+    from utils.metrics_server import run_metrics_server
+    metrics_thread = threading.Thread(target=run_metrics_server, args=(metrics_port,), daemon=True)
+    metrics_thread.start()
+    
     bot = WishesBot()
     async with bot:
         await bot.start(BOT_TOKEN)

@@ -11,6 +11,7 @@ import pytz
 
 from utils.db_manager import db_manager
 from utils.api_client import api_client
+from utils import metrics
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +80,7 @@ class Wishes(commands.Cog):
 
     @tasks.loop(time=POST_TIME)
     async def daily_task(self):
+        start_time = metrics.record_task_start()
         today = datetime.now(SERVER_TIMEZONE)
         logger.info(
             "Running daily task",
@@ -90,6 +92,7 @@ class Wishes(commands.Cog):
             removed_departed = await self._cleanup_departed_members()
             birthday_count = await self._check_for_birthdays(today)
             holiday_count = await self._check_for_holidays(today)
+            metrics.record_task_end(start_time, status='success')
             summary = (
                 f"✅ Daily task done | Birthdays: {birthday_count} | Holidays: {holiday_count} | Roles removed: {removed_roles} | "
                 f"Departed cleaned: {removed_departed} | "
@@ -110,6 +113,8 @@ class Wishes(commands.Cog):
                 },
             )
         except Exception as exc:
+            metrics.record_task_end(start_time, status='error')
+            metrics.record_error(error_type='daily_task')
             await _safe_send(self.bot.get_channel(STAFF_ALERTS_CHANNEL_ID), f"❌ Daily task failed: {exc}")
             logger.exception("Daily task encountered an error", extra={"event": "daily_task_error", "error": str(exc)})
 
@@ -160,10 +165,13 @@ class Wishes(commands.Cog):
                     await _safe_send(alerts_channel, preview)
                 else:
                     await _safe_send(wishes_channel, safe_text)
+                    metrics.record_wish_sent(wish_type='holiday')
                     sent += 1
             elif alerts_channel:
                 await alerts_channel.send(f"⚠️ **API Error:** Failed to generate wish text for **{holiday_name}**.")
+                metrics.record_message_failed(channel_type='holiday')
 
+        metrics.record_holiday(status='success')
         return sent
 
     async def _check_for_birthdays(self, today: datetime):
@@ -173,6 +181,8 @@ class Wishes(commands.Cog):
         if not all([guild, birthday_channel, birthday_role]):
             await _safe_send(self.bot.get_channel(STAFF_ALERTS_CHANNEL_ID), "⚠️ Birthday check skipped: guild/channel/role missing.")
             logger.warning("Birthday check skipped: missing guild/channel/role", extra={"event": "birthday_skip"})
+            metrics.record_birthday(status='error')
+            return 0
             return 0
 
         cursor = db_manager.get_birthdays_for_date(today.day, today.month)

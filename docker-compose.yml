@@ -10,11 +10,14 @@ services:
     environment:
       - LOG_FORMAT=json
       - LOG_LEVEL=INFO
+      - METRICS_PORT=8000
     volumes:
       # Mount logs directory (optional)
       - ./logs:/app/logs
     networks:
       - mangalify-network
+    ports:
+      - "8000:8000"  # Prometheus metrics port
     depends_on:
       - mongodb
     healthcheck:
@@ -48,8 +51,28 @@ networks:
   mangalify-network:
     driver: bridge
 
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: mangalify-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+    networks:
+      - mangalify-network
+    ports:
+      - "9090:9090"
+    depends_on:
+      - mangalify-bot
+
 volumes:
   mongodb-data:
     driver: local
   mongodb-config:
+    driver: local
+  prometheus-data:
     driver: local
